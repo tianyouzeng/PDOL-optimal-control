@@ -1,6 +1,7 @@
-# PINNs-Interface-Optimal-Control
+# PDOL-optimal-control
 
 This repository contains the source code for the paper "**_An Operator Learning Approach to Nonsmooth Optimal Control of Nonlinear PDEs_**" by Yongcun Song, Xiaoming Yuan, Hangrui Yue, and Tianyou Zeng.
+The paper can be found at [arxiv:2409.14417](https://arxiv.org/abs/2409.14417).
 
 ## Requirements
 
@@ -27,3 +28,17 @@ Besides the files in the root directory:
 - The [`trained_models`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/trained_models) folder contains the models trained by the code in this repository.
 - The [`trad_alg`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/trad_alg) folder contains the implementaion of some traditional numerical algorithms that we compared with in the paper.
 - The [`env`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/env) folder contains an example [conda](https://docs.conda.io/en/latest) environment for running the code.
+
+## Citation
+
+```
+@misc{song2024operatorlearningapproachnonsmooth,
+      title={An Operator Learning Approach to Nonsmooth Optimal Control of Nonlinear PDEs}, 
+      author={Yongcun Song and Xiaoming Yuan and Hangrui Yue and Tianyou Zeng},
+      year={2024},
+      eprint={2409.14417},
+      archivePrefix={arXiv},
+      primaryClass={math.OC},
+      url={https://arxiv.org/abs/2409.14417}, 
+}
+```
