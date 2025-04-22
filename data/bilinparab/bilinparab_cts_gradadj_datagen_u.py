@@ -32,13 +32,13 @@ for i in range(n):
     fac = 3.0
     u_a = -1.0
     u_b = 2.0
-    uf[(-thre<uf)&(uf<thre)] = np.zeros(uf[(-thre<uf)&(uf<thre)].shape)
-    uf[uf>thre] = (uf[uf>thre] - thre) / (fac + 1)
-    uf[uf<-thre] = (uf[uf<-thre] + thre) / (fac + 1)
-    uf[uf > u_b] = 0.0 * uf[uf > u_b] + u_b
-    uf[uf < u_a] = 0.0 * uf[uf < u_a] + u_a
+    uf[(-thre < uf) & (uf < thre)] = np.zeros(uf[(-thre < uf) & (uf < thre)].shape) # type: ignore
+    uf[uf > thre] = (uf[uf > thre] - thre) / (fac + 1) # type: ignore
+    uf[uf < -thre] = (uf[uf < -thre] + thre) / (fac + 1) # type: ignore
+    uf[uf > u_b] = 0.0 * uf[uf > u_b] + u_b # type: ignore
+    uf[uf < u_a] = 0.0 * uf[uf < u_a] + u_a # type: ignore
 
-    u[i, :, :, :] = uf[::4, ::4, ::4]  # down-sampling
+    u[i, :, :, :] = uf[::4, ::4, ::4]  # down-sampling      # type: ignore 
 
 mat_fname = "bp_cts_gradadj_train_u_play.mat"
 sio.savemat(mat_fname, {"u": u})

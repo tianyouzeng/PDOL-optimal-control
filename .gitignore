@@ -1,4 +1,9 @@
 *.mat
+*.npy
 *.npz
 __pycache__/
 *.py[cod]
+results/
+log/
+.vscode
+trained_models/sp_*

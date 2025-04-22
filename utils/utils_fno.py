@@ -1,5 +1,4 @@
 import torch
-from torch.optim.optimizer import Optimizer
 import numpy as np
 import scipy.io
 import h5py
@@ -9,7 +8,8 @@ import math
 import operator
 from functools import reduce
 
-from torch import Tensor
+from typing import Optional, Callable, Union, Iterable, Dict, Any
+import numpy.typing as npt
 
 #################################################
 #
@@ -17,11 +17,11 @@ from torch import Tensor
 #
 #################################################
 
-def adam(params: list[Tensor],
-         grads: list[Tensor],
-         exp_avgs: list[Tensor],
-         exp_avg_sqs: list[Tensor],
-         max_exp_avg_sqs: list[Tensor],
+def adam(params: list[torch.Tensor],
+         grads: list[torch.Tensor],
+         exp_avgs: list[torch.Tensor],
+         exp_avg_sqs: list[torch.Tensor],
+         max_exp_avg_sqs: list[torch.Tensor],
          state_steps: list[int],
          *,
          amsgrad: bool,
@@ -63,7 +63,7 @@ def adam(params: list[Tensor],
         param.addcdiv_(exp_avg, denom, value=-step_size)
 
 
-class Adam(Optimizer):
+class Adam(torch.optim.Optimizer):
     r"""Implements Adam algorithm.
     It has been proposed in `Adam: A Method for Stochastic Optimization`_.
     The implementation of the L2 penalty follows changes proposed in
@@ -88,8 +88,15 @@ class Adam(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
-                 weight_decay=0, amsgrad=False):
+    def __init__(
+            self, 
+            params: Iterable[torch.Tensor] | Iterable[Dict[str, Any]], 
+            lr: float=1e-3, 
+            betas: tuple[float, float]=(0.9, 0.999), 
+            eps: float=1e-8,
+            weight_decay: float=0,
+            amsgrad: bool=False
+        ) -> None:
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -104,13 +111,13 @@ class Adam(Optimizer):
                         weight_decay=weight_decay, amsgrad=amsgrad)
         super(Adam, self).__init__(params, defaults)
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         super(Adam, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('amsgrad', False)
 
     @torch.no_grad()
-    def step(self, closure=None):
+    def step(self, closure: Optional[Callable[[], float]]=None) -> Optional[float]: # type: ignore
         """Performs a single optimization step.
         Args:
             closure (callable, optional): A closure that reevaluates the model
@@ -177,7 +184,7 @@ class Adam(Optimizer):
 
 # reading data
 class MatReader(object):
-    def __init__(self, file_path, to_torch=True, to_cuda=False, to_float=True):
+    def __init__(self, file_path: str, to_torch: bool=True, to_cuda: bool=False, to_float: bool=True) -> None:
         super(MatReader, self).__init__()
 
         self.to_torch = to_torch
@@ -186,23 +193,23 @@ class MatReader(object):
 
         self.file_path = file_path
 
-        self.data = None
-        self.old_mat = None
+        self.data: dict[str, npt.NDArray] = dict()
+        self.old_mat = dict()
         self._load_file()
 
-    def _load_file(self):
+    def _load_file(self) -> None:
         try:
             self.data = scipy.io.loadmat(self.file_path)
             self.old_mat = True
         except:
-            self.data = h5py.File(self.file_path, mode='r')
+            self.data = h5py.File(self.file_path, mode='r') # type: ignore
             self.old_mat = False
 
-    def load_file(self, file_path):
+    def load_file(self, file_path: str) -> None:
         self.file_path = file_path
         self._load_file()
 
-    def read_field(self, field):
+    def read_field(self, field) -> Union[npt.NDArray, torch.Tensor]:
         x = self.data[field]
 
         if not self.old_mat:
@@ -220,18 +227,18 @@ class MatReader(object):
 
         return x
 
-    def set_cuda(self, to_cuda):
+    def set_cuda(self, to_cuda: bool) -> None:
         self.to_cuda = to_cuda
 
-    def set_torch(self, to_torch):
+    def set_torch(self, to_torch: bool) -> None:
         self.to_torch = to_torch
 
-    def set_float(self, to_float):
+    def set_float(self, to_float: bool) -> None:
         self.to_float = to_float
 
 # normalization, pointwise gaussian
-class UnitGaussianNormalizer(object):
-    def __init__(self, x, eps=0.00001):
+class UnitGaussianNormalizer:
+    def __init__(self, x: torch.Tensor, eps: float=0.00001):
         super(UnitGaussianNormalizer, self).__init__()
 
         # x could be in shape of ntrain*n or ntrain*T*n or ntrain*n*T
@@ -239,11 +246,12 @@ class UnitGaussianNormalizer(object):
         self.std = torch.std(x, 0)
         self.eps = eps
 
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         x = (x - self.mean) / (self.std + self.eps)
         return x
 
-    def decode(self, x, sample_idx=None):
+    def decode(self, x: torch.Tensor, 
+               sample_idx: Optional[torch.Tensor]=None) -> torch.Tensor:
         if sample_idx is None:
             std = self.std + self.eps # n
             mean = self.mean
@@ -254,48 +262,51 @@ class UnitGaussianNormalizer(object):
             if len(self.mean.shape) > len(sample_idx[0].shape):
                 std = self.std[:,sample_idx]+ self.eps # T*batch*n
                 mean = self.mean[:,sample_idx]
+            else:
+                raise ValueError("sample_idx shape not supported")
 
         # x is in shape of batch*n or T*batch*n
         x = (x * std) + mean
         return x
 
-    def cuda(self):
+    def cuda(self) -> None:
         self.mean = self.mean.cuda()
         self.std = self.std.cuda()
 
-    def cpu(self):
+    def cpu(self) -> None:
         self.mean = self.mean.cpu()
         self.std = self.std.cpu()
 
 # normalization, Gaussian
-class GaussianNormalizer(object):
-    def __init__(self, x, eps=0.00001):
+class GaussianNormalizer:
+    def __init__(self, x: torch.Tensor, eps: float=0.00001) -> None:
         super(GaussianNormalizer, self).__init__()
 
         self.mean = torch.mean(x)
         self.std = torch.std(x)
         self.eps = eps
 
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         x = (x - self.mean) / (self.std + self.eps)
         return x
 
-    def decode(self, x, sample_idx=None):
+    def decode(self, x: torch.Tensor,
+               sample_idx: Optional[torch.Tensor]=None) -> torch.Tensor:
         x = (x * (self.std + self.eps)) + self.mean
         return x
 
-    def cuda(self):
+    def cuda(self) -> None:
         self.mean = self.mean.cuda()
         self.std = self.std.cuda()
 
-    def cpu(self):
+    def cpu(self) -> None:
         self.mean = self.mean.cpu()
         self.std = self.std.cpu()
 
 
 # normalization, scaling by range
-class RangeNormalizer(object):
-    def __init__(self, x, low=0.0, high=1.0):
+class RangeNormalizer:
+    def __init__(self, x: torch.Tensor, low: float=0.0, high: float=1.0) -> None:
         super(RangeNormalizer, self).__init__()
         mymin = torch.min(x, 0)[0].view(-1)
         mymax = torch.max(x, 0)[0].view(-1)
@@ -303,14 +314,14 @@ class RangeNormalizer(object):
         self.a = (high - low)/(mymax - mymin)
         self.b = -self.a*mymax + high
 
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         s = x.size()
         x = x.view(s[0], -1)
         x = self.a*x + self.b
         x = x.view(s)
         return x
 
-    def decode(self, x):
+    def decode(self, x: torch.Tensor) -> torch.Tensor:
         s = x.size()
         x = x.view(s[0], -1)
         x = (x - self.b)/self.a
@@ -318,8 +329,8 @@ class RangeNormalizer(object):
         return x
 
 #loss function with rel/abs Lp loss
-class LpLoss(object):
-    def __init__(self, d=2, p=2, size_average=True, reduction=True):
+class LpLoss:
+    def __init__(self, d: int=2, p: int=2, size_average: bool=True, reduction: bool=True):
         super(LpLoss, self).__init__()
 
         #Dimension and Lp-norm type are postive
@@ -417,7 +428,7 @@ class HsLoss(object):
                 weight += a[0]**2 * (k_x**2 + k_y**2)
             if k >= 2:
                 weight += a[1]**2 * (k_x**4 + 2*k_x**2*k_y**2 + k_y**4)
-            weight = torch.sqrt(weight)
+            weight = torch.sqrt(weight) # type: ignore
             loss = self.rel(x*weight, y*weight)
         else:
             loss = self.rel(x, y)
@@ -440,7 +451,7 @@ class DenseNet(torch.nn.Module):
 
         assert self.n_layers >= 1
 
-        self.layers = nn.Modulelist()
+        self.layers = nn.ModuleList()
 
         for j in range(self.n_layers):
             self.layers.append(nn.Linear(layers[j], layers[j+1]))

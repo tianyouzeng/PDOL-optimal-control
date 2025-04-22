@@ -1,4 +1,4 @@
-# PDOL-optimal-control
+# PDOL-Optimal-Control
 
 This repository contains the source code for the paper "**_An Operator Learning Approach to Nonsmooth Optimal Control of Nonlinear PDEs_**" by Yongcun Song, Xiaoming Yuan, Hangrui Yue, and Tianyou Zeng.
 The paper can be found at [arxiv:2409.14417](https://arxiv.org/abs/2409.14417).
@@ -12,6 +12,10 @@ To run the code in this repository, you will need following software and package
 - [SciPy](https://scipy.org/)
 - [Matplotlib](https://matplotlib.org/)
 - [PyTorch](https://pytorch.org/)
+- [sparse](https://sparse.pydata.org/en/stable/)
+- [h5py](https://www.h5py.org/)
+
+An example conda environment is provided in the [`env`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/env) folder.
 
 ## Files
 
@@ -23,7 +27,7 @@ The name of the files suggests their functionality. For example:
 
 Besides the files in the root directory:
 
-- The [`models`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/models) and [`utils`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/utils) folders contain the class definitions of DeepONet, MIONet and FNO. They also contains utility classes and functions for training and evaluation.
+- The [`models`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/models) and [`utils`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/utils) folders contain the class definitions of DeepONet, MIONet and FNO. They also contains utility classes and functions for problem parameters, training, and evaluation.
 - The [`data`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/data) folder contains the source code we used for generating training sets and testing sets.
 - The [`trained_models`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/trained_models) folder contains the models trained by the code in this repository.
 - The [`trad_alg`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/trad_alg) folder contains the implementaion of some traditional numerical algorithms that we compared with in the paper.

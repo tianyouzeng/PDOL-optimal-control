@@ -8,16 +8,17 @@ This file is adapted from the official implementation of FNO in:
 
 # Imports and initializations
 
+from timeit import default_timer
+from typing import Literal
+
 import torch
 import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 import scipy.io as sio
 
-from models.fno import FNO3d_M
-from utils.utils_fno import MatReader, Adam, LpLoss, count_params
-
-from timeit import default_timer
+from models.fno import FNO3d
+from utils.utils_fno import Adam, LpLoss, count_params
 
 torch.manual_seed(114514)
 np.random.seed(114514)
@@ -30,20 +31,16 @@ else:
 
 # Configurations
 
-TRAIN_PATH = ('./data/bilinparab/bp_cts_gradadj_train_u.mat', 
-              './data/bilinparab/bp_cts_gradadj_train_f.mat', 
-              './data/bilinparab/bp_cts_gradadj_train_y.mat')
-TEST_PATH = ('./data/bilinparab/bp_cts_gradadj_test_u.mat', 
-             './data/bilinparab/bp_cts_gradadj_test_f.mat', 
-             './data/bilinparab/bp_cts_gradadj_test_y.mat')
+TRAIN_PATH = './data/bilinparab/bp_cts_gradadj_train.npz'
+TEST_PATH = './data/bilinparab/bp_cts_gradadj_test.npz'
 
-ntrain = 2048
-ntest = 256 
+n_train = 2048
+n_test = 256
 
-modes = 8
+modes = [8, 8, 8]
 width = 16
 input_num = 2
-paddings = 8
+paddings = [8, 8, 8]
 
 batch_size = 8
 epochs = 300
@@ -51,105 +48,128 @@ learning_rate = 0.001
 scheduler_step = 50
 scheduler_gamma = 0.5
 
-print(epochs, learning_rate, scheduler_step, scheduler_gamma)
-
-runtime = np.zeros(2, )
-t1 = default_timer()
+print(f'Configurations:\n')
+print(f'{n_train=}\n{n_test=}\n{modes=}\n{width=}\n{input_num=}\n{paddings=}')
+print(f'{batch_size=}\n{epochs=}\n{learning_rate=}\n{scheduler_step=}\n{scheduler_gamma=}\n')
 
 sub = 1
 S = 64 // sub
 T = 64
 
+record_time = True
+save_pred: Literal['off', 'npy', 'mat'] = 'off'
+
+t1 = 0
+if record_time:
+    runtime = np.zeros(2, )
+    t1 = default_timer()
+
 
 # Load data
 
-reader = MatReader(TRAIN_PATH[0])
-train_u = reader.read_field('u')[:ntrain,::sub,::sub,:T]
-reader = MatReader(TRAIN_PATH[1])
-train_f = reader.read_field('f')[:ntrain,::sub,::sub,:T]
-reader = MatReader(TRAIN_PATH[2])
-train_s = reader.read_field('s')[:ntrain,::sub,::sub,:T]
+train_reader = np.load(TRAIN_PATH)
+train_u = torch.tensor(train_reader["u"])[:n_train, ::sub, ::sub, :T].to(device)
+train_f = torch.tensor(train_reader["f"])[:n_train, ::sub, ::sub, :T].to(device)
+train_s = torch.tensor(train_reader["s"])[:n_train, ::sub, ::sub, :T].to(device)
+del train_reader
 
-reader = MatReader(TEST_PATH[0])
-test_u = reader.read_field('u')[-ntest:,::sub,::sub,:T]
-reader = MatReader(TEST_PATH[1])
-test_f = reader.read_field('f')[-ntest:,::sub,::sub,:T]
-reader = MatReader(TEST_PATH[2])
-test_s = reader.read_field('s')[-ntest:,::sub,::sub,:T]
+test_reader = np.load(TEST_PATH)
+test_u = torch.tensor(test_reader["u"])[-n_test:, ::sub, ::sub, :T].to(device)
+test_f = torch.tensor(test_reader["f"])[-n_test:, ::sub, ::sub, :T].to(device)
+test_s = torch.tensor(test_reader["s"])[-n_test:, ::sub, ::sub, :T].to(device)
+del test_reader
 
-print(train_u.shape)
-print(test_u.shape)
+print(f'training data shape: {train_u.shape}')
+print(f'testing data shape: {test_u.shape}')
 assert (S == train_u.shape[-2])
 assert (T == train_u.shape[-1])
 
-train_u = train_u.reshape(ntrain,S,S,T,1)
-train_f = train_f.reshape(ntrain,S,S,T,1)
-test_u = test_u.reshape(ntest,S,S,T,1)
-test_f = test_f.reshape(ntest,S,S,T,1)
+train_u = train_u.reshape(n_train, S, S, T, 1)
+train_f = train_f.reshape(n_train, S, S, T, 1)
+test_u = test_u.reshape(n_test, S, S, T, 1)
+test_f = test_f.reshape(n_test, S, S, T, 1)
+train_uf = torch.cat((train_u, train_f), dim=-1)
+test_uf = torch.cat((test_u, test_f), dim=-1)
+del train_u, train_f, test_u, test_f
 
-train_loader = DataLoader(TensorDataset(train_u, train_f, train_s), batch_size=batch_size, shuffle=True)
+train_loader = DataLoader(
+    TensorDataset(train_uf, train_s),
+    batch_size=batch_size,
+    shuffle=True
+)
 
-t2 = default_timer()
-
-print('preprocessing finished, time used:', t2-t1)
+if record_time:
+    t2 = default_timer()
+    print(f'preprocessing finished, time used: {t2 - t1}')
+print(f'\n')
 
 
 # Training
 
-model = FNO3d_M(input_num, modes, modes, modes, width, paddings).cuda()
-print(count_params(model))
+model = FNO3d(input_num, modes, width, paddings).to(device)
+print(f'FNO parameter count: {count_params(model)}\n')
 optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step, gamma=scheduler_gamma)
+scheduler = torch.optim.lr_scheduler.StepLR(
+    optimizer,
+    step_size=scheduler_step,
+    gamma=scheduler_gamma
+)
 myloss = LpLoss(size_average=False)
 
+t_start = 0
+if record_time:
+    t_start = default_timer()
+
 for ep in range(epochs):
-    model.train()
     t1 = default_timer()
     train_mse = 0
     train_l2 = 0
-    for u, f, s in train_loader:
-        u, f, s = u.cuda(), f.cuda(), s.cuda()
-        uf = torch.cat((u, f), dim=-1)
 
+    for uf, s in train_loader:
         optimizer.zero_grad()
         out = model(uf).squeeze(dim=-1)
-
         mse = F.mse_loss(out, s, reduction='mean')
-
         l2 = myloss(out.view(batch_size, -1), s.view(batch_size, -1))
         l2.backward()
-
         optimizer.step()
+
         train_mse += mse.item()
         train_l2 += l2.item()
 
     scheduler.step()
 
     train_mse /= len(train_loader)
-    train_l2 /= ntrain
+    train_l2 /= n_train
 
     t2 = default_timer()
-    print(ep, t2-t1, train_mse, train_l2)
+    print(f'epoch: {ep}, time: {t2-t1}, training mse: {train_mse}, training l2: {train_l2}')
 
-torch.save(model.state_dict(), "./bp_model_cts_gradadj_fno3d_param.pt")
+if record_time:
+    t_end = default_timer()
+    print(f'Total training time: {t_end - t_start}')
+
+torch.save(model.state_dict(), "./bp_model_cts_gradadj_fno3d_param_playground.pt")
 
 
 # Test the trained model
 
+test_loader = DataLoader(
+    TensorDataset(test_uf, test_s),
+    batch_size=1,
+    shuffle=False
+)
 pred = torch.zeros(test_s.shape)
+test_l2 = np.zeros(n_test)
 index = 0
-test_loader = DataLoader(TensorDataset(test_u, test_f, test_s), batch_size=1, shuffle=False)
 with torch.no_grad():
-    for u, f, s in test_loader:
-        test_l2 = 0
-        u, f, s = u.cuda(), f.cuda(), s.cuda()
-        uf = torch.cat((u, f), dim=-1)
-
+    for uf, s in test_loader:
         out = model(uf).view(S, S, T)
         pred[index] = out
-
-        test_l2 += myloss(out.view(1, -1), s.view(1, -1)).item()
-        print(index, test_l2)
+        test_l2[index] = myloss(out.view(1, -1), s.view(1, -1)).item()
         index = index + 1
+    print('testing l2:', np.mean(test_l2))
 
-# sio.savemat('bp_pred_all_fno3d.mat', mdict={'pred': pred.cpu().numpy()})
+if save_pred == 'npy':
+    np.save('bp_pred_all_fno3d.npy', pred.cpu().numpy())
+elif save_pred == 'mat':
+    sio.savemat('bp_pred_all_fno3d.mat', mdict={'pred': pred.cpu().numpy()})

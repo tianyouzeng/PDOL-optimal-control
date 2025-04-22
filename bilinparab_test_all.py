@@ -8,76 +8,78 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 import scipy.io as sio
+from typing import Literal
 
-from models.fno import FNO3d_M
-from utils.utils_fno import LpLoss, count_params, MatReader
+from models.fno import FNO3d
+from utils.utils_fno import LpLoss, count_params
+
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 
 
-# Configs
+# Configurations
 
-modes = 8
+TEST_PATH = './data/bilinparab/bp_cts_gradadj_test.npz'
+n_test = 256
+
+modes = [8, 8, 8]
 width = 16
 input_num = 2
-paddings = 8
+paddings = [8, 8, 8]
 
 sub = 1
 S = 64 // sub
 T = 64
 
+save_pred: Literal['off', 'npy', 'mat'] = 'off'
+
 
 # Load data
 
-TEST_PATH = ('./data/bilinparab/bp_cts_gradadj_test_u.mat', 
-             './data/bilinparab/bp_cts_gradadj_test_y.mat')
-ntest = 256
+test_reader = np.load(TEST_PATH)
+test_u = torch.tensor(test_reader["u"])[-n_test:, ::sub, ::sub, :T].to(device)
+test_f = torch.tensor(test_reader["f"])[-n_test:, ::sub, ::sub, :T].to(device)
+test_s = torch.tensor(test_reader["s"])[-n_test:, ::sub, ::sub, :T].to(device)
+del test_reader
 
-reader = MatReader(TEST_PATH[0])
-test_u = reader.read_field('u')[-ntest:,::sub,::sub,:T]
-reader = MatReader(TEST_PATH[1])
-test_f = reader.read_field('f')[-ntest:,::sub,::sub,:T]
-reader = MatReader(TEST_PATH[2])
-test_s = reader.read_field('s')[-ntest:,::sub,::sub,:T]
+test_u = test_u.reshape(n_test,S,S,T,1)
+test_f = test_f.reshape(n_test,S,S,T,1)
+test_uf = torch.cat((test_u, test_f), dim=-1)
+del test_u, test_f
 
-test_u = test_u.reshape(ntest,S,S,T,1)
-test_f = test_f.reshape(ntest,S,S,T,1)
-test_uf = torch.cat((test_u, test_f), axis=-1)
+test_loader = DataLoader(TensorDataset(test_uf, test_s), batch_size=1, shuffle=False)
 
-device = torch.device('cuda')
 
 # Evaluation
 
-model = FNO3d_M(input_num, modes, modes, modes, width, paddings).cuda()
+model = FNO3d(input_num, modes, width, paddings).to(device)
 model.load_state_dict(torch.load('./trained_models/bp_model_cts_gradadj_fno3d_param.pt'))
-print(count_params(model))
-model.eval()
+print(f'FNO parameter count: {count_params(model)}\n')
 
 myloss = LpLoss(d=3, size_average=False)
-
 pred = torch.zeros(test_s.shape)
 index = 0
-test_loader = DataLoader(TensorDataset(test_uf, test_s), batch_size=1, shuffle=False)
-test_l2_rel = torch.zeros(ntest)
-test_l2_abs = torch.zeros(ntest)
+test_l2_rel = torch.zeros(n_test)
+test_l2_abs = torch.zeros(n_test)
+
 with torch.no_grad():
     for uf, s in test_loader:
-        uf, s = uf.cuda(), s.cuda()
-
         out = model(uf).view(1, S, S, T)
         pred[index] = out[None,:,:,:]
 
         test_l2_rel[index] = myloss(out, s).item()
         test_l2_abs[index] = myloss.abs(out, s).item()
-        print(index, test_l2_abs[index].item(), test_l2_rel[index].item())
         index = index + 1
 
-print("Absolute L2 error mean: ", torch.mean(test_l2_abs).item())
-print("Relative L2 error mean: ", torch.mean(test_l2_rel).item())
+print(f"Absolute L2 error mean: {torch.mean(test_l2_abs).item():.4e}")
+print(f"Relative L2 error mean: {torch.mean(test_l2_rel).item():.4e}")
 
-print("Absolute L2 error SD: ", torch.std(test_l2_abs).item())
-print("Relative L2 error SD: ", torch.std(test_l2_rel).item())
+print(f"Absolute L2 error SD: {torch.std(test_l2_abs).item():.4e}")
+print(f"Relative L2 error SD: {torch.std(test_l2_rel).item():.4e}")
 
-# sio.savemat('bp_pred_fno3d.mat', mdict={'pred': pred.cpu().numpy()})
-
-
-
-
+if save_pred == 'npy':
+    np.save('./bp_pred_cts_gradadj_fno3d.npy', pred.cpu().numpy())
+elif save_pred == 'mat':
+    sio.savemat('bp_pred_cts_gradadj_fno3d.mat', mdict={'pred': pred.cpu().numpy()})
