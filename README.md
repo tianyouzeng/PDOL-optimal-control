@@ -7,11 +7,11 @@ The paper can be found at [arxiv:2409.14417](https://arxiv.org/abs/2409.14417).
 
 To run the code in this repository, you will need following software and packages:
 
-- [Python](https://www.python.org/)
+- [Python](https://www.python.org/) (==3.11.6)
 - [NumPy](https://numpy.org/)
 - [SciPy](https://scipy.org/)
 - [Matplotlib](https://matplotlib.org/)
-- [PyTorch](https://pytorch.org/)
+- [PyTorch](https://pytorch.org/) (==2.1.0)
 - [sparse](https://sparse.pydata.org/en/stable/)
 - [h5py](https://www.h5py.org/)
 
@@ -32,6 +32,10 @@ Besides the files in the root directory:
 - The [`trained_models`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/trained_models) folder contains the models trained by the code in this repository.
 - The [`trad_alg`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/trad_alg) folder contains the implementaion of some traditional numerical algorithms that we compared with in the paper.
 - The [`env`](https://github.com/tianyouzeng/PDOL-optimal-control/tree/main/env) folder contains an example [conda](https://docs.conda.io/en/latest) environment for running the code.
+
+## Datasets and Trained Models
+
+The generated training and testing datasets for the neural networks are not included in this repository due to GitHub's file size limitations. They can be found in this [OneDrive folder](https://connecthkuhk-my.sharepoint.com/:f:/g/personal/logic_connect_hku_hk/EjU26OIz4bxAn5lAXVTftZ4BWReXSW3LOAz_Jix0qPVM-Q?e=GeeekN). Similarly, the trained model parameters for the semilinear parabolic control problem are available [here](https://connecthkuhk-my.sharepoint.com/:f:/g/personal/logic_connect_hku_hk/EjU26OIz4bxAn5lAXVTftZ4BWReXSW3LOAz_Jix0qPVM-Q?e=GeeekN).
 
 ## Citation
 
